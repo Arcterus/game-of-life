@@ -6,7 +6,7 @@ extern crate graphics;
 extern crate piston;
 
 use graphics::*;
-use piston::{AssetStore, Game, GameIteratorSettings, GameWindowSDL2, GameWindowSettings, KeyReleaseArgs, MouseMoveArgs, MouseReleaseArgs, RenderArgs};
+use piston::{Game, GameIteratorSettings, GameWindowSDL2, GameWindowSettings, KeyReleaseArgs, MouseMoveArgs, MouseReleaseArgs, RenderArgs};
 
 pub static WINDOW_HEIGHT: uint = 480;
 pub static WINDOW_WIDTH: uint = 640;
@@ -326,10 +326,9 @@ fn main() {
 		}
 	);
 	let mut app = App::new();
-	let mut assets = AssetStore::empty();
 	let game_iter_settings = GameIteratorSettings {
 		updates_per_second: 120,
 		max_frames_per_second: 60
 	};
-	app.run(&mut window, &mut assets, &game_iter_settings);
+	app.run(&mut window, &game_iter_settings);
 }

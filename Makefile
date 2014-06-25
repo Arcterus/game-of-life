@@ -8,7 +8,7 @@ life: src/life.rs piston
 	rustc -O $(RUST_CFG) -L src/piston-workspace/piston-symlinks/ -o $@ $<
 
 piston:
-	git submodule update && cd src/piston-workspace && chmod +x build.sh && ./build.sh && make
+	git submodule update --init --recursive && cd src/piston-workspace && chmod +x build.sh && ./build.sh && make
 	touch $@
 
 clean-conway:

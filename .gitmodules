@@ -1,0 +1,3 @@
+[submodule "src/piston-workspace"]
+	path = src/piston-workspace
+	url = git://github.com/PistonDevelopers/piston-workspace.git
