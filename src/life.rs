@@ -263,6 +263,16 @@ impl Game for App {
 	fn key_release(&mut self, args: &KeyReleaseArgs) {
 		if !self.started && args.key == piston::keyboard::Return {
 			self.started = true;
+		} else {
+			match args.key {
+				piston::keyboard::R => {
+					self.grid = Grid::new();
+					self.started = false;
+					self.count = 30;
+					self.mouse_loc = (0.0, 0.0);
+				}
+				_ => {}
+			}
 		}
 		debug!("released key: {}", args.key);
 	}
