@@ -5,8 +5,15 @@ extern crate collections;
 extern crate graphics;
 extern crate piston;
 
+extern crate sdl2_game_window;
+extern crate opengl_graphics;
+
 use graphics::*;
-use piston::{Game, GameIteratorSettings, GameWindowSDL2, GameWindowSettings, KeyReleaseArgs, MouseMoveArgs, MouseReleaseArgs, RenderArgs};
+use opengl_graphics::{
+    Gl,
+};
+use piston::{Game, GameIteratorSettings, GameWindowSettings, KeyReleaseArgs, MouseMoveArgs, MouseReleaseArgs, RenderArgs};
+use sdl2_game_window::GameWindowSDL2;
 
 pub static WINDOW_HEIGHT: uint = 480;
 pub static WINDOW_WIDTH: uint = 640;
@@ -192,7 +199,7 @@ impl Block {
 	pub fn render(&self, gl: &mut Gl, win_ctx: &Context) {
 		win_ctx
 		       .rect((self.loc.x * BLOCK_SIZE) as f64, (self.loc.y * BLOCK_SIZE) as f64, BLOCK_SIZE as f64, BLOCK_SIZE as f64)
-		       .rgb(0.0, 0.0, 0.0).fill(gl);
+		       .rgb(0.0, 0.0, 0.0).draw(gl);
 	}
 }
 
@@ -288,10 +295,10 @@ impl Game for App {
 		self.mouse_loc = (args.x, args.y);
 	}
 
-	fn render(&mut self, args: &mut RenderArgs) {
+	fn render(&mut self, args: &RenderArgs) {
 		(&mut self.gl).viewport(0, 0, args.width as i32, args.height as i32);
 		let ref c = Context::abs(args.width as f64, args.height as f64);
-		c.rgb(1.0, 1.0, 1.0).clear(&mut self.gl);
+		c.rgb(1.0, 1.0, 1.0).draw(&mut self.gl);
 
 		if self.started {
 			if self.count > 0 {
@@ -304,11 +311,6 @@ impl Game for App {
 
 		self.grid.render(&mut self.gl, c);
 	}
-}
-
-#[start]
-fn start(argc: int, argv: **u8) -> int {
-	native::start(argc, argv, main)
 }
 
 fn main() {
