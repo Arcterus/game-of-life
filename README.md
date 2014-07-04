@@ -9,16 +9,16 @@ Build Instructions
 ------------------
 
 ```
-make
+cargo build
 ```
 
 Game Instructions
 -----------------
 
 When the game starts up, you click on areas with your mouse where you'd like
-cells to appear.  When you've finished making cells, hit either the ```return```
-key or the ```p``` key to watch the game run.  Both of these keys may be used
-to pause the game.  If you'd like to restart the game, press ```r```.
+cells to appear.  When you've finished making cells, hit either the `return`
+key or the `p` key to watch the game run.  Both of these keys may be used
+to pause the game.  If you'd like to restart the game, press `r`.
 
 Contribute
 ----------
@@ -31,10 +31,11 @@ Credits
 
 * Arcterus (this entire project)
 * MagentaCompanion (the original thndr of making the Game of Life in Java)
+* Indiv0 (updates and Cargo support)
 
 License
 -------
 
 Copyright (C) 2014 by Arcterus.  
-This project is licensed under the MPL v2.0.  See ```LICENSE``` for more
+This project is licensed under the MPL v2.0.  See `LICENSE` for more
 details.
