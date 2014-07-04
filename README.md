@@ -15,6 +15,8 @@ cargo build
 Game Instructions
 -----------------
 
+![screenshot](https://raw.githubusercontent.com/arcterus/game-of-life/master/game-of-life.png)
+
 When the game starts up, you click on areas with your mouse where you'd like
 cells to appear.  When you've finished making cells, hit either the `return`
 key or the `p` key to watch the game run.  Both of these keys may be used
