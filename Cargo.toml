@@ -4,12 +4,13 @@ name = "game-of-life"
 version = "0.0.0"
 authors = [
     "Arcterus <arcterus@mail.com>",
-    "indiv0 <contact@nikitapek.in>"]
+    "indiv0 <contact@nikitapek.in>"
+]
 
 [[bin]]
 
 name = "game-of-life"
-path = "./src/life.rs"
+path = "src/life.rs"
 
 [dependencies.piston]
 
