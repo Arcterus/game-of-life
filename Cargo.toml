@@ -9,7 +9,7 @@ authors = [
 
 [[bin]]
 
-name = "game-of-life"
+name = "life"
 path = "src/life.rs"
 
 [dependencies.piston]
