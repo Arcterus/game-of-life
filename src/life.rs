@@ -77,7 +77,7 @@ impl Grid {
 				let mut i = 0;
 				let len = self.blocks.len();
 				while i < len {
-					if old == self.blocks.get(i) {
+					if old == &self.blocks[i] {
 						break;
 					}
 					i += 1;
@@ -93,7 +93,7 @@ impl Grid {
 		if self.valid(block.loc.x, block.loc.y) {
 			let mut i = 0;
 			while i < self.blocks.len() {
-				if self.blocks.get(i) == block {
+				if &self.blocks[i] == block {
 					self.blocks.remove(i);
 					break;
 				}
@@ -109,31 +109,31 @@ impl Grid {
 		if self.valid(block.loc.x, block.loc.y) {
 			for i in range(if block.loc.x > 0 { -1 } else { 0 }, if block.loc.x < self.grid.len() - 1 { 2 } else { 1 }) {
 				if block.loc.y > 0 {
-					let row = self.grid.get(block.loc.y - 1);
+					let row = &self.grid[block.loc.y - 1];
 					let xpos = (i + block.loc.x as int) as uint;
-					vec.push(match *row.get(xpos) {
+					vec.push(match row[xpos] {
 						Some(blk) => Block(blk),
 						None => Location(Location::new(xpos, block.loc.y - 1))
 					});
 				}
 				if block.loc.y < self.grid.len() - 1 {
-					let row = self.grid.get(block.loc.y + 1);
+					let row = &self.grid[block.loc.y + 1];
 					let xpos = (i + block.loc.x as int) as uint;
-					vec.push(match *row.get(xpos) {
+					vec.push(match row[xpos] {
 						Some(blk) => Block(blk),
 						None => Location(Location::new(xpos, block.loc.y + 1))
 					});
 				}
 			}
-			let row = self.grid.get(block.loc.y);
+			let row = &self.grid[block.loc.y];
 			if block.loc.x > 0 {
-				vec.push(match *row.get(block.loc.x - 1) {
+				vec.push(match row[block.loc.x - 1] {
 					Some(blk) => Block(blk),
 					None => Location(Location::new(block.loc.x - 1, block.loc.y))
 				});
 			}
-			if block.loc.x < self.grid.get(0).len() - 1 {
-				vec.push(match *row.get(block.loc.x + 1) {
+			if block.loc.x < self.grid[0].len() - 1 {
+				vec.push(match row[block.loc.x + 1] {
 					Some(blk) => Block(blk),
 					None => Location(Location::new(block.loc.x + 1, block.loc.y))
 				});
@@ -168,7 +168,7 @@ impl Grid {
 
 	pub fn contains(&self, block: &Block) -> bool {
 		if self.valid(block.loc.x, block.loc.y) {
-			self.grid.get(block.loc.y).get(block.loc.x).is_some()
+			self.grid[block.loc.y][block.loc.x].is_some()
 		} else {
 			false
 		}
@@ -176,7 +176,7 @@ impl Grid {
 
 	#[inline]
 	fn valid(&self, x: uint, y: uint) -> bool {
-		y < self.grid.len() && x < self.grid.get(0).len()
+		y < self.grid.len() && x < self.grid[0].len()
 	}
 
 	#[inline]
