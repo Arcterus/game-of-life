@@ -52,7 +52,8 @@ pub struct App {
    gl: GlGraphics,
    grid: Grid,
    started: bool,
-   mouse_loc: (f64, f64)
+   mouse_loc: (f64, f64),
+   mouse_down: (bool, bool)   // (left, right)
 }
 
 impl Grid {
@@ -214,7 +215,15 @@ impl App {
          gl: gl,
          grid: Grid::new(),
          started: false,
-         mouse_loc: (0.0, 0.0)
+         mouse_loc: (0.0, 0.0),
+         mouse_down: (false, false)
+      }
+   }
+
+   pub fn press(&mut self, button: &Button) {
+      match button {
+         &Button::Mouse(button) => self.mouse_press(button),
+         _ => {}
       }
    }
 
@@ -247,18 +256,45 @@ impl App {
       println!("released key: {:?}", key);
    }
 
-   pub fn mouse_release(&mut self, button: MouseButton) {
-      if !self.started {
-         let (mut x, mut y) = self.mouse_loc;
-         x = (x - (x as usize % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-         y = (y - (y as usize % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-         self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
-      }
+   fn mouse_press(&mut self, button: MouseButton) {
+      let (left, right) = self.mouse_down;
+      self.mouse_down = match button {
+         MouseButton::Left => (true, false),
+         MouseButton::Right => (false, true),
+         _ => (left, right)
+      };
+      self.mouse_paint();
+      println!("press mouse button: {:?}", button);
+   }
+
+   fn mouse_release(&mut self, button: MouseButton) {
+      let (left, right) = self.mouse_down;
+      self.mouse_down = match button {
+         MouseButton::Left => (false, right),
+         MouseButton::Right => (left, false),
+         _ => (left, right)
+      };
       println!("release mouse mutton: {:?}", button);
    }
 
    pub fn mouse_move(&mut self, pos: [f64; 2]) {
       self.mouse_loc = (pos[0], pos[1]);
+      self.mouse_paint();
+   }
+
+   fn mouse_paint(&mut self) {
+      let (left, right) = self.mouse_down;
+      if !self.started && (left || right) {
+         let (mut x, mut y) = self.mouse_loc;
+         x = (x - (x as usize % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
+         y = (y - (y as usize % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
+         let block = Block::new(Location::new(x as usize, y as usize));
+         if left {
+            self.grid.insert(block);
+         } else {
+            self.grid.remove(&block);
+         }
+      }
    }
 
    #[cfg(random)]
@@ -367,6 +403,10 @@ fn main() {
 
       if let Some(b) = e.release_args() {
          app.release(&mut window, &b);
+      }
+
+      if let Some(b) = e.press_args() {
+         app.press(&b);
       }
 
       if let Some(c) = e.mouse_cursor_args() {
