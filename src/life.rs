@@ -65,7 +65,7 @@ impl Grid {
 
 	pub fn insert(&mut self, block: Block) {
 		let (x, y) = (block.loc.x, block.loc.y);
-		if !self.valid(x, y) {
+		if !Grid::valid(x, y) {
 			return;
 		}
 		match self.grid[y][x] {
@@ -94,7 +94,7 @@ impl Grid {
 	}
 
 	pub fn remove(&mut self, block: &Block) {
-		if self.valid(block.loc.x, block.loc.y) {
+		if Grid::valid(block.loc.x, block.loc.y) {
 			let mut i = 0;
 			while i < self.blocks.len() {
 				if self.blocks[i] == *block {
@@ -109,7 +109,7 @@ impl Grid {
 
 	pub fn neighbors(&self, block: &Block) -> Vec<Neighbor> {
 		let mut vec = vec!();
-		if self.valid(block.loc.x, block.loc.y) {
+		if Grid::valid(block.loc.x, block.loc.y) {
 			for i in (if block.loc.x > 0 { -1 } else { 0 })
 			         ..
 			         (if block.loc.x < GRID_WIDTH - 1 { 2 } else { 1 }) {
@@ -172,7 +172,7 @@ impl Grid {
 	}
 
 	pub fn contains(&self, block: &Block) -> bool {
-		if self.valid(block.loc.x, block.loc.y) {
+		if Grid::valid(block.loc.x, block.loc.y) {
 			self.grid[block.loc.y][block.loc.x].is_some()
 		} else {
 			false
@@ -180,8 +180,8 @@ impl Grid {
 	}
 
 	#[inline]
-	fn valid(&self, x: usize, y: usize) -> bool {
-		y < self.grid.len() && x < self.grid[0].len()
+	fn valid(x: usize, y: usize) -> bool {
+		y < GRID_HEIGHT && x < GRID_WIDTH
 	}
 
 	#[inline]
@@ -211,8 +211,7 @@ impl Block {
 impl Location {
 	#[inline]
 	pub fn new(x: usize, y: usize) -> Location {
-		assert!(x <= GRID_WIDTH);
-		assert!(y <= GRID_HEIGHT);
+		assert!(Grid::valid(x, y));
 		Location {
 			x: x,
 			y: y
@@ -281,9 +280,13 @@ impl App {
 	fn mouse_release(&mut self, btn: MouseButton) {
 		if !self.started {
 			let (x, y) = self.mouse_loc;
-			let x = (x - (x as u32 % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-			let y = (y - (y as u32 % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-			self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
+			if x > 0.0 && y > 0.0 {
+				let x = x as usize / BLOCK_SIZE as usize;
+				let y = y as usize / BLOCK_SIZE as usize;
+				if Grid::valid(x, y) {
+					self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
+				}
+			}
 		}
 		println!("released mouse button: {:?}", btn);
 	}
