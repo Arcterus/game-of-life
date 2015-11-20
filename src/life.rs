@@ -40,13 +40,14 @@ pub struct Location {
 	pub y: usize
 }
 
-pub const FRAME_DURATION: f64 = 0.10; // seconds
+pub const FRAME_DURATION: f64 = 0.1; // seconds
 
 pub struct App {
 	gl: GlGraphics,
 	grid: Grid,
 	started: bool,
 	mouse_loc: (f64, f64),
+	mouse_down: bool,
 	t: f64  // seconds since last frame
 }
 
@@ -226,6 +227,7 @@ impl App {
 			grid: Grid::new(),
 			started: false,
 			mouse_loc: (0.0, 0.0),
+			mouse_down: false,
 			t: 0.0
 		}
 	}
@@ -263,36 +265,43 @@ impl App {
 		}
 	}
 
-	fn key_release(&mut self, key: Key) {
+	fn key_press(&mut self, key: Key) {
 		match key {
 			Key::R => {
 				self.grid = Grid::new();
 				self.started = false;
-				self.mouse_loc = (0.0, 0.0);
 			}
 			Key::P | Key::Return | Key::Space =>
 				self.started = !self.started,
 			_ => {}
 		}
-		println!("released key: {:?}", key);
 	}
 
-	fn mouse_release(&mut self, btn: MouseButton) {
-		if !self.started {
-			let (x, y) = self.mouse_loc;
-			if x > 0.0 && y > 0.0 {
-				let x = x as usize / BLOCK_SIZE as usize;
-				let y = y as usize / BLOCK_SIZE as usize;
-				if Grid::valid(x, y) {
-					self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
-				}
-			}
-		}
-		println!("released mouse button: {:?}", btn);
+	fn mouse_press(&mut self) {
+		self.mouse_down = true;
+		self.mouse_paint();
+	}
+
+	fn mouse_release(&mut self) {
+		self.mouse_down = false;
 	}
 
 	fn mouse_move(&mut self, x: f64, y: f64) {
 		self.mouse_loc = (x, y);
+		if self.mouse_down {
+			self.mouse_paint();
+		}
+	}
+
+	fn mouse_paint(&mut self) {
+		let (x, y) = self.mouse_loc;
+		if x > 0.0 && y > 0.0 {
+			let x = x as usize / BLOCK_SIZE as usize;
+			let y = y as usize / BLOCK_SIZE as usize;
+			if Grid::valid(x, y) {
+				self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
+			}
+		}
 	}
 
 	fn render(&mut self, args: &RenderArgs) {
@@ -330,10 +339,12 @@ fn main() {
 				if app.started {
 					app.update(u)
 				},
-			Event::Input(Input::Release(Button::Keyboard(key))) =>
-				app.key_release(key),
-			Event::Input(Input::Release(Button::Mouse(btn))) =>
-				app.mouse_release(btn),
+			Event::Input(Input::Press(Button::Keyboard(key))) =>
+				app.key_press(key),
+			Event::Input(Input::Press(Button::Mouse(MouseButton::Left))) =>
+				app.mouse_press(),
+			Event::Input(Input::Release(Button::Mouse(MouseButton::Left))) =>
+				app.mouse_release(),
 			Event::Input(Input::Move(Motion::MouseCursor(x, y))) =>
 				app.mouse_move(x, y),
 			_ => {}
