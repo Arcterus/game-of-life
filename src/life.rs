@@ -1,24 +1,23 @@
-#![feature(globs, phase)]
-
-extern crate collections;
-#[phase(plugin, link)] extern crate log;
 extern crate graphics;
 extern crate piston;
-
-extern crate sdl2_game_window;
+extern crate glutin_window;
 extern crate opengl_graphics;
 
+use piston::window::WindowSettings;
+use piston::event_loop::*;
+use piston::input::*;
 use graphics::*;
-use opengl_graphics::{
-    Gl,
-};
-use piston::{Game, GameIteratorSettings, GameWindowSettings, KeyReleaseArgs, MouseMoveArgs, MouseReleaseArgs, RenderArgs};
-use sdl2_game_window::GameWindowSDL2;
+use graphics::math::Matrix2d;
+use opengl_graphics::{GlGraphics, OpenGL};
+use glutin_window::GlutinWindow as Window;
 
-pub static WINDOW_HEIGHT: uint = 480;
-pub static WINDOW_WIDTH: uint = 640;
+pub const WINDOW_HEIGHT: u32 = 480;
+pub const WINDOW_WIDTH: u32 = 640;
 
-pub static BLOCK_SIZE: uint = 10;  // NOTE: WINDOW_HEIGHT and WINDOW_WIDTH should be divisible by this
+pub const BLOCK_SIZE: u32 = 10;  // NOTE: WINDOW_HEIGHT and WINDOW_WIDTH should be divisible by this
+
+pub const GRID_WIDTH: usize = (WINDOW_WIDTH / BLOCK_SIZE) as usize;
+pub const GRID_HEIGHT: usize = (WINDOW_HEIGHT / BLOCK_SIZE) as usize;
 
 pub enum Neighbor {
 	Block(Block),
@@ -30,31 +29,33 @@ pub struct Grid {
 	blocks: Vec<Block>
 }
 
-#[deriving(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Block {
 	pub loc: Location
 }
 
-#[deriving(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Location {
-	pub x: uint,
-	pub y: uint
+	pub x: usize,
+	pub y: usize
 }
 
+pub const FRAME_DURATION: f64 = 0.10; // seconds
+
 pub struct App {
-	gl: Gl,
+	gl: GlGraphics,
 	grid: Grid,
 	started: bool,
-	count: uint,
-	mouse_loc: (f64, f64)
+	mouse_loc: (f64, f64),
+	t: f64  // seconds since last frame
 }
 
 impl Grid {
 	pub fn new() -> Grid {
 		let mut rows: Vec<Vec<Option<Block>>> = vec!();
-		rows.reserve(WINDOW_HEIGHT / BLOCK_SIZE);
-		for _ in range(0, WINDOW_HEIGHT / BLOCK_SIZE) {
-			rows.push(Vec::from_elem(WINDOW_WIDTH / BLOCK_SIZE, None));
+		rows.reserve(GRID_HEIGHT);
+		for _ in 0 .. GRID_HEIGHT {
+			rows.push(vec![None; GRID_WIDTH]);
 		}
 		Grid {
 			grid: rows,
@@ -67,25 +68,28 @@ impl Grid {
 		if !self.valid(x, y) {
 			return;
 		}
-		let gr_loc = self.grid.get_mut(y).get_mut(x);
-		if *gr_loc == None {
-			*gr_loc = Some(block);
-			self.blocks.push(gr_loc.unwrap());
-		} else if gr_loc.unwrap() != block {
-			let idx = {
-				let old = gr_loc.get_ref();
-				let mut i = 0;
-				let len = self.blocks.len();
-				while i < len {
-					if old == &self.blocks[i] {
-						break;
-					}
-					i += 1;
+		match self.grid[y][x] {
+			None => {
+				self.grid[y][x] = Some(block);
+				self.blocks.push(block);
+			},
+			Some(old) => {
+				if old != block {
+					let idx = {
+						let mut i = 0;
+						let len = self.blocks.len();
+						while i < len {
+							if old == self.blocks[i] {
+								break;
+							}
+							i += 1;
+						}
+						i
+					};
+					self.grid[y][x] = Some(block);
+					self.blocks[idx] = block;
 				}
-				i
-			};
-			*gr_loc = Some(block);
-			*self.blocks.get_mut(idx) = gr_loc.unwrap();
+			}
 		}
 	}
 
@@ -93,49 +97,50 @@ impl Grid {
 		if self.valid(block.loc.x, block.loc.y) {
 			let mut i = 0;
 			while i < self.blocks.len() {
-				if &self.blocks[i] == block {
+				if self.blocks[i] == *block {
 					self.blocks.remove(i);
 					break;
 				}
 				i += 1;
 			}
-			let gr_loc = self.grid.get_mut(block.loc.y).get_mut(block.loc.x);
-			*gr_loc = None;
+			self.grid[block.loc.y][block.loc.x] = None;
 		}
 	}
 
 	pub fn neighbors(&self, block: &Block) -> Vec<Neighbor> {
 		let mut vec = vec!();
 		if self.valid(block.loc.x, block.loc.y) {
-			for i in range(if block.loc.x > 0 { -1 } else { 0 }, if block.loc.x < self.grid.len() - 1 { 2 } else { 1 }) {
+			for i in (if block.loc.x > 0 { -1 } else { 0 })
+			         ..
+			         (if block.loc.x < GRID_WIDTH - 1 { 2 } else { 1 }) {
 				if block.loc.y > 0 {
 					let row = &self.grid[block.loc.y - 1];
-					let xpos = (i + block.loc.x as int) as uint;
+					let xpos = (i + block.loc.x as isize) as usize;
 					vec.push(match row[xpos] {
-						Some(blk) => Block(blk),
-						None => Location(Location::new(xpos, block.loc.y - 1))
+						Some(blk) => Neighbor::Block(blk),
+						None => Neighbor::Location(Location::new(xpos, block.loc.y - 1))
 					});
 				}
 				if block.loc.y < self.grid.len() - 1 {
 					let row = &self.grid[block.loc.y + 1];
-					let xpos = (i + block.loc.x as int) as uint;
+					let xpos = (i + block.loc.x as isize) as usize;
 					vec.push(match row[xpos] {
-						Some(blk) => Block(blk),
-						None => Location(Location::new(xpos, block.loc.y + 1))
+						Some(blk) => Neighbor::Block(blk),
+						None => Neighbor::Location(Location::new(xpos, block.loc.y + 1))
 					});
 				}
 			}
 			let row = &self.grid[block.loc.y];
 			if block.loc.x > 0 {
 				vec.push(match row[block.loc.x - 1] {
-					Some(blk) => Block(blk),
-					None => Location(Location::new(block.loc.x - 1, block.loc.y))
+					Some(blk) => Neighbor::Block(blk),
+					None => Neighbor::Location(Location::new(block.loc.x - 1, block.loc.y))
 				});
 			}
 			if block.loc.x < self.grid[0].len() - 1 {
 				vec.push(match row[block.loc.x + 1] {
-					Some(blk) => Block(blk),
-					None => Location(Location::new(block.loc.x + 1, block.loc.y))
+					Some(blk) => Neighbor::Block(blk),
+					None => Neighbor::Location(Location::new(block.loc.x + 1, block.loc.y))
 				});
 			}
 		}
@@ -145,9 +150,9 @@ impl Grid {
 	#[inline]
 	pub fn live_neighbors(&self, block: &Block) -> Vec<Block> {
 		let mut live = vec!();
-		for neighbor in self.neighbors(block).move_iter() {
+		for neighbor in self.neighbors(block) {
 			match neighbor {
-				Block(blk) => live.push(blk),
+				Neighbor::Block(blk) => live.push(blk),
 				_ => {}
 			}
 		}
@@ -157,9 +162,9 @@ impl Grid {
 	#[inline]
 	pub fn dead_neighbors(&self, block: &Block) -> Vec<Location> {
 		let mut dead = vec!();
-		for neighbor in self.neighbors(block).move_iter() {
+		for neighbor in self.neighbors(block) {
 			match neighbor {
-				Location(loc) => dead.push(loc),
+				Neighbor::Location(loc) => dead.push(loc),
 				_ => {}
 			}
 		}
@@ -175,14 +180,14 @@ impl Grid {
 	}
 
 	#[inline]
-	fn valid(&self, x: uint, y: uint) -> bool {
+	fn valid(&self, x: usize, y: usize) -> bool {
 		y < self.grid.len() && x < self.grid[0].len()
 	}
 
 	#[inline]
-	pub fn render(&self, gl: &mut Gl, win_ctx: &Context) {
+	pub fn render(&self, t: &Matrix2d, gl: &mut GlGraphics) {
 		for block in self.blocks.iter() {
-			block.render(gl, win_ctx);
+			block.render(t, gl);
 		}
 	}
 }
@@ -196,18 +201,18 @@ impl Block {
 	}
 
 	#[inline]
-	pub fn render(&self, gl: &mut Gl, win_ctx: &Context) {
-		win_ctx
-		       .rect((self.loc.x * BLOCK_SIZE) as f64, (self.loc.y * BLOCK_SIZE) as f64, BLOCK_SIZE as f64, BLOCK_SIZE as f64)
-		       .rgb(0.0, 0.0, 0.0).draw(gl);
+	pub fn render(&self, t: &Matrix2d, gl: &mut GlGraphics) {
+		const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+		let coords = [self.loc.x as f64, self.loc.y as f64, 1.0, 1.0];
+		rectangle(BLACK, coords, *t, gl);
 	}
 }
 
 impl Location {
 	#[inline]
-	pub fn new(x: uint, y: uint) -> Location {
-		assert!(x <= WINDOW_WIDTH / BLOCK_SIZE);
-		assert!(y <= WINDOW_HEIGHT / BLOCK_SIZE);
+	pub fn new(x: usize, y: usize) -> Location {
+		assert!(x <= GRID_WIDTH);
+		assert!(y <= GRID_HEIGHT);
 		Location {
 			x: x,
 			y: y
@@ -216,34 +221,28 @@ impl Location {
 }
 
 impl App {
-	#[inline]
-	pub fn new() -> App {
+	pub fn new(gl: GlGraphics) -> App {
 		App {
-			gl: Gl::new(),
+			gl: gl,
 			grid: Grid::new(),
 			started: false,
-			count: 30,
-			mouse_loc: (0.0, 0.0)
+			mouse_loc: (0.0, 0.0),
+			t: 0.0
 		}
 	}
 
-	#[cfg(random)]
-	#[inline]
-	fn render_logic(&mut self) {
-		use std::rand::random;
-
-		let mut x = (random::<f64>() * WINDOW_WIDTH as f64) as uint;
-		x = (x - x % BLOCK_SIZE) / BLOCK_SIZE;
-		let mut y = (random::<f64>() * WINDOW_HEIGHT as f64) as uint;
-		y = (y - y % BLOCK_SIZE) / BLOCK_SIZE;
-		self.grid.insert(Block::new(Location::new(x, y)));
+	fn update(&mut self, args: &UpdateArgs) {
+		self.t += args.dt;
+		while self.t > FRAME_DURATION {
+			self.update_one_frame();
+			self.t -= FRAME_DURATION;
+		}
 	}
 
-	#[cfg(not(random))]
-	#[inline]
-	fn render_logic(&mut self) {
-		let mut remove = vec!();
-		let mut add = vec!();
+	fn update_one_frame(&mut self) {
+		let mut remove = vec![];
+		let mut add = vec![];
+
 		for block in self.grid.blocks.iter() {
 			let live = self.grid.live_neighbors(block);
 			let livelen = live.len();
@@ -260,74 +259,81 @@ impl App {
 		for block in remove.iter() {
 			self.grid.remove(block);
 		}
-		for block in add.move_iter() {
+		for block in add {
 			self.grid.insert(block);
 		}
 	}
-}
 
-impl Game for App {
-	fn key_release(&mut self, args: &KeyReleaseArgs) {
-		match args.key {
-			piston::keyboard::R => {
+	fn key_release(&mut self, key: Key) {
+		match key {
+			Key::R => {
 				self.grid = Grid::new();
 				self.started = false;
-				self.count = 30;
 				self.mouse_loc = (0.0, 0.0);
 			}
-			piston::keyboard::P | piston::keyboard::Return => self.started = !self.started,
+			Key::P | Key::Return | Key::Space =>
+				self.started = !self.started,
 			_ => {}
 		}
-		debug!("released key: {}", args.key);
+		println!("released key: {:?}", key);
 	}
 
-	fn mouse_release(&mut self, args: &MouseReleaseArgs) {
+	fn mouse_release(&mut self, btn: MouseButton) {
 		if !self.started {
-			let (mut x, mut y) = self.mouse_loc;
-			x = (x - (x as uint % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-			y = (y - (y as uint % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
-			self.grid.insert(Block::new(Location::new(x as uint, y as uint)))
+			let (x, y) = self.mouse_loc;
+			let x = (x - (x as u32 % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
+			let y = (y - (y as u32 % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
+			self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
 		}
-		debug!("released mouse button: {}", args.button);
+		println!("released mouse button: {:?}", btn);
 	}
 
-	fn mouse_move(&mut self, args: &MouseMoveArgs) {
-		self.mouse_loc = (args.x, args.y);
+	fn mouse_move(&mut self, x: f64, y: f64) {
+		self.mouse_loc = (x, y);
 	}
 
 	fn render(&mut self, args: &RenderArgs) {
-		(&mut self.gl).viewport(0, 0, args.width as i32, args.height as i32);
-		let ref c = Context::abs(args.width as f64, args.height as f64);
-		c.rgb(1.0, 1.0, 1.0).draw(&mut self.gl);
+		const WHITE:  [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-		if self.started {
-			if self.count > 0 {
-				self.count -= 1;
-			} else {
-				self.count = 30;
-				self.render_logic();
-			}
-		}
-
-		self.grid.render(&mut self.gl, c);
+		let grid = &self.grid;
+		self.gl.draw(args.viewport(), |c, gl| {
+			graphics::clear(WHITE, gl);
+			grid.render(&c.transform.scale(BLOCK_SIZE as f64, BLOCK_SIZE as f64), gl);
+		});
 	}
 }
 
 fn main() {
+	// Change this to OpenGL::V2_1 if not working.
+	let opengl = OpenGL::V3_2;
+
 	assert!(WINDOW_WIDTH % BLOCK_SIZE == 0);
 	assert!(WINDOW_HEIGHT % BLOCK_SIZE == 0);
-	let mut window = GameWindowSDL2::new(
-		GameWindowSettings {
-			title: "Conway's Game of Life".to_string(),
-			size: [WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32],
-			fullscreen: false,
-			exit_on_esc: true
+	let window: Window = WindowSettings::new(
+			"Conway's Game of Life".to_string(),
+			[WINDOW_WIDTH, WINDOW_HEIGHT]
+		)
+		.opengl(opengl)
+		.exit_on_esc(true)
+		.build()
+		.unwrap();
+
+	let mut app = App::new(GlGraphics::new(opengl));
+	for e in window.events() {
+		match e {
+			Event::Render(ref r) =>
+				app.render(r),
+			Event::Update(ref u) =>
+				if app.started {
+					app.update(u)
+				},
+			Event::Input(Input::Release(Button::Keyboard(key))) =>
+				app.key_release(key),
+			Event::Input(Input::Release(Button::Mouse(btn))) =>
+				app.mouse_release(btn),
+			Event::Input(Input::Move(Motion::MouseCursor(x, y))) =>
+				app.mouse_move(x, y),
+			_ => {}
 		}
-	);
-	let mut app = App::new();
-	let game_iter_settings = GameIteratorSettings {
-		updates_per_second: 120,
-		max_frames_per_second: 60
-	};
-	app.run(&mut window, &game_iter_settings);
+	}
 }
