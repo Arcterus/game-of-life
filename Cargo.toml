@@ -1,5 +1,4 @@
 [package]
-
 name = "game-of-life"
 version = "0.0.0"
 authors = [
@@ -8,23 +7,11 @@ authors = [
 ]
 
 [[bin]]
-
 name = "life"
 path = "src/life.rs"
 
-[dependencies.piston]
-
-git = "https://github.com/PistonDevelopers/piston"
-
-[dependencies.graphics]
-
-git = "https://github.com/PistonDevelopers/rust-graphics"
-
-[dependencies.sdl2_game_window]
-
-git = "https://github.com/PistonDevelopers/sdl2_game_window"
-
-[dependencies.opengl_graphics]
-
-git = "https://github.com/PistonDevelopers/opengl_graphics"
-
+[dependencies]
+piston = "0.15.1"
+piston2d-graphics = "0.11.0"
+pistoncore-glutin_window = "0.17.1"
+piston2d-opengl_graphics = "0.19.0"
