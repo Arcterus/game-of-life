@@ -1,7 +1,7 @@
 [package]
 
 name = "game-of-life"
-version = "0.0.0"
+version = "0.1.0"
 authors = [
     "Arcterus <arcterus@mail.com>",
     "indiv0 <contact@nikitapek.in>"
@@ -12,19 +12,8 @@ authors = [
 name = "life"
 path = "src/life.rs"
 
-[dependencies.piston]
-
-git = "https://github.com/PistonDevelopers/piston"
-
-[dependencies.graphics]
-
-git = "https://github.com/PistonDevelopers/rust-graphics"
-
-[dependencies.sdl2_game_window]
-
-git = "https://github.com/PistonDevelopers/sdl2_game_window"
-
-[dependencies.opengl_graphics]
-
-git = "https://github.com/PistonDevelopers/opengl_graphics"
-
+[dependencies]
+piston = "0.31.1"
+piston2d-graphics = "0.21.1"
+pistoncore-glutin_window = "0.35.0"
+piston2d-opengl_graphics = "0.42.0"
