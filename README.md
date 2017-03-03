@@ -38,6 +38,6 @@ Credits
 License
 -------
 
-Copyright (C) 2014 by Arcterus.  
+Copyright (C) 2014-2017 by Alex Lyon (Arcterus).  
 This project is licensed under the MPL v2.0.  See `LICENSE` for more
 details.
