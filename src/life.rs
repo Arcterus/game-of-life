@@ -1,20 +1,31 @@
+#[macro_use]
+extern crate clap;
+
 extern crate graphics;
 extern crate piston;
 
 extern crate glutin_window;
 extern crate opengl_graphics;
 
+use std::str::FromStr;
+use std::collections::HashSet;
+use clap::Arg;
 use graphics::*;
 use opengl_graphics::{GlGraphics, OpenGL};
 use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
+use piston::window::AdvancedWindow;
 use glutin_window::GlutinWindow;
 
-pub static WINDOW_HEIGHT: usize = 480;
-pub static WINDOW_WIDTH: usize = 640;
+pub const WINDOW_TITLE: &'static str = "Conway's Game of Life";
 
-pub static BLOCK_SIZE: usize = 10;  // NOTE: WINDOW_HEIGHT and WINDOW_WIDTH should be divisible by this
+pub const WINDOW_HEIGHT: usize = 480;
+pub const WINDOW_WIDTH: usize = 640;
+
+pub const DEFAULT_SPEED: u64 = 2;
+
+pub const BLOCK_SIZE: usize = 10;  // NOTE: WINDOW_HEIGHT and WINDOW_WIDTH should be divisible by this
 
 pub enum Neighbor {
    Block(Block),
@@ -23,15 +34,15 @@ pub enum Neighbor {
 
 pub struct Grid {
    grid: Vec<Vec<Option<Block>>>,
-   blocks: Vec<Block>
+   blocks: HashSet<Block>
 }
 
-#[derive(Clone, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Eq, Hash, Copy)]
 pub struct Block {
    pub loc: Location
 }
 
-#[derive(Clone, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Eq, Hash, Copy)]
 pub struct Location {
    pub x: usize,
    pub y: usize
@@ -53,47 +64,28 @@ impl Grid {
       }
       Grid {
          grid: rows,
-         blocks: vec!()
+         blocks: HashSet::new()
       }
    }
 
    pub fn insert(&mut self, block: Block) {
       let (x, y) = (block.loc.x, block.loc.y);
-      if !self.valid(x, y) {
-         return;
-      }
-      let gr_loc = &mut self.grid[y][x];
-      if *gr_loc == None {
-         *gr_loc = Some(block);
-         self.blocks.push(gr_loc.unwrap());
-      } else if gr_loc.unwrap() != block {
-         let idx = {
-            let old = gr_loc.unwrap();
-            let mut i = 0;
-            let len = self.blocks.len();
-            while i < len {
-               if old == self.blocks[i] {
-                  break;
-               }
-               i += 1;
-            }
-            i
-         };
-         *gr_loc = Some(block);
-         self.blocks[idx] = gr_loc.unwrap();
+      if self.valid(x, y) {
+         if self.grid[y][x] == None {
+            self.grid[y][x] = Some(block);
+            self.blocks.insert(self.grid[y][x].unwrap());
+         } else if self.grid[y][x].unwrap() != block {
+            // FIXME: is this even necessary?
+            self.blocks.remove(&self.grid[y][x].unwrap());
+            self.grid[y][x] = Some(block);
+            self.blocks.insert(self.grid[y][x].unwrap());
+         }
       }
    }
 
    pub fn remove(&mut self, block: &Block) {
       if self.valid(block.loc.x, block.loc.y) {
-         let mut i = 0;
-         while i < self.blocks.len() {
-            if &self.blocks[i] == block {
-               self.blocks.remove(i);
-               break;
-            }
-            i += 1;
-         }
+         self.blocks.remove(block);
          self.grid[block.loc.y][block.loc.x] = None;
       }
    }
@@ -101,36 +93,17 @@ impl Grid {
    pub fn neighbors(&self, block: &Block) -> Vec<Neighbor> {
       let mut vec = vec!();
       if self.valid(block.loc.x, block.loc.y) {
-         for i in (if block.loc.x > 0 { -1 } else { 0 })..(if block.loc.x < self.grid.len() - 1 { 2 } else { 1 }) {
-            if block.loc.y > 0 {
-               let row = &self.grid[block.loc.y - 1];
-               let xpos = (i + block.loc.x as i32) as usize;
+         let places = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (0, -1), (1, 1), (1, -1), (1, 0)];
+         for &(x, y) in &places {
+            let xpos = (block.loc.x as isize + x) as usize;
+            let ypos = (block.loc.y as isize + y) as usize;
+            if self.valid(xpos, ypos) {
+               let row = &self.grid[ypos];
                vec.push(match row[xpos] {
                   Some(blk) => Neighbor::Block(blk),
-                  None => Neighbor::Location(Location::new(xpos, block.loc.y - 1))
+                  None => Neighbor::Location(Location::new(xpos, ypos))
                });
             }
-            if block.loc.y < self.grid.len() - 1 {
-               let row = &self.grid[block.loc.y + 1];
-               let xpos = (i + block.loc.x as i32) as usize;
-               vec.push(match row[xpos] {
-                  Some(blk) => Neighbor::Block(blk),
-                  None => Neighbor::Location(Location::new(xpos, block.loc.y + 1))
-               });
-            }
-         }
-         let row = &self.grid[block.loc.y];
-         if block.loc.x > 0 {
-            vec.push(match row[block.loc.x - 1] {
-               Some(blk) => Neighbor::Block(blk),
-               None => Neighbor::Location(Location::new(block.loc.x - 1, block.loc.y))
-            });
-         }
-         if block.loc.x < self.grid[0].len() - 1 {
-            vec.push(match row[block.loc.x + 1] {
-               Some(blk) => Neighbor::Block(blk),
-               None => Neighbor::Location(Location::new(block.loc.x + 1, block.loc.y))
-            });
          }
       }
       vec
@@ -174,8 +147,23 @@ impl Grid {
    }
 
    #[inline]
-   pub fn render(&self, gl: &mut GlGraphics, args: &RenderArgs) {
-      for block in self.blocks.iter() {
+   pub fn render(&self, gl: &mut GlGraphics, started: bool, args: &RenderArgs) {
+      use graphics::grid::*;
+      use graphics::line::Line;
+
+      const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+      if !started {
+         gl.draw(args.viewport(), |c, gl| {
+            Grid {
+               cols: self.grid[0].len() as u32,
+               rows: self.grid.len() as u32,
+               units: BLOCK_SIZE as f64
+            }.draw(&Line::new(BLACK, 1.0), &c.draw_state, c.transform, gl);
+         });
+      }
+
+      for block in &self.blocks {
          block.render(gl, args);
       }
    }
@@ -195,12 +183,15 @@ impl Block {
 
       const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+      let block = rectangle::square(0.0, 0.0, BLOCK_SIZE as f64);
+
       gl.draw(args.viewport(), |c, gl| {
-         let block = rectangle::square((self.loc.x * BLOCK_SIZE) as f64,
-                                       (self.loc.y * BLOCK_SIZE) as f64,
-                                       BLOCK_SIZE as f64);
-         rectangle(BLACK, block, c.transform, gl);
-	  });
+         rectangle(BLACK,
+                   block,
+                   c.transform.trans((self.loc.x * BLOCK_SIZE) as f64,
+                                     (self.loc.y * BLOCK_SIZE) as f64),
+                   gl);
+      });
    }
 }
 
@@ -227,25 +218,33 @@ impl App {
       }
    }
 
-   pub fn release(&mut self, button: &Button) {
+   pub fn release<W: AdvancedWindow>(&mut self, window: &mut W, button: &Button) {
       match button {
-         &Button::Keyboard(key) => self.key_release(key),
-		 &Button::Mouse(button) => self.mouse_release(button),
-		 _ => { }
-	  }
+         &Button::Keyboard(key) => self.key_release(window, key),
+         &Button::Mouse(button) => self.mouse_release(button),
+         _ => { }
+      }
    }
 
-   pub fn key_release(&mut self, key: Key) {
+   pub fn key_release<W: AdvancedWindow>(&mut self, window: &mut W, key: Key) {
       match key {
          Key::R => {
             self.grid = Grid::new();
             self.started = false;
             self.mouse_loc = (0.0, 0.0);
          }
-         Key::P | Key::Return => self.started = !self.started,
+         Key::P | Key::Return => {
+            if self.started {
+               self.started = false;
+               window.set_title(format!("{} (paused)", WINDOW_TITLE));
+            } else {
+               self.started = true;
+               window.set_title(WINDOW_TITLE.to_string());
+            }
+         }
          _ => {}
       }
-	  println!("released key: {:?}", key);
+      println!("released key: {:?}", key);
    }
 
    pub fn mouse_release(&mut self, button: MouseButton) {
@@ -255,14 +254,14 @@ impl App {
          y = (y - (y as usize % BLOCK_SIZE) as f64) / BLOCK_SIZE as f64;
          self.grid.insert(Block::new(Location::new(x as usize, y as usize)))
       }
-	  println!("release mouse mutton: {:?}", button);
+      println!("release mouse mutton: {:?}", button);
    }
 
    pub fn mouse_move(&mut self, pos: [f64; 2]) {
       self.mouse_loc = (pos[0], pos[1]);
    }
 
-      #[cfg(random)]
+   #[cfg(random)]
    #[inline]
    fn update_logic(&mut self) {
       use std::rand::random;
@@ -279,11 +278,12 @@ impl App {
    fn update_logic(&mut self) {
       let mut remove = vec!();
       let mut add = vec!();
-      for block in &self.grid.blocks {
+      
+      for &block in &self.grid.blocks {
          let live = self.grid.live_neighbors(&block);
          let livelen = live.len();
          if livelen != 2 && livelen != 3 {
-            remove.push(block.clone());
+            remove.push(block);
          }
          for loc in self.grid.dead_neighbors(&block) {
             let block = Block::new(loc);
@@ -308,11 +308,11 @@ impl App {
 
    pub fn render(&mut self, args: &RenderArgs) {
       (&mut self.gl).viewport(0, 0, args.width as i32, args.height as i32);
-	  self.gl.draw(args.viewport(), |_, gl| {
+      self.gl.draw(args.viewport(), |_, gl| {
          clear([1.0, 1.0, 1.0, 1.0], gl);
-	  });
+      });
 
-      self.grid.render(&mut self.gl, args);
+      self.grid.render(&mut self.gl, self.started, args);
    }
 }
 
@@ -320,32 +320,57 @@ fn main() {
    assert!(WINDOW_WIDTH % BLOCK_SIZE == 0);
    assert!(WINDOW_HEIGHT % BLOCK_SIZE == 0);
 
+   let matches = clap::App::new("game-of-life")
+                               .version(crate_version!())
+                               .author(crate_authors!())
+                               .about(crate_description!())
+                               .arg(Arg::with_name("speed")
+                                    .short("s")
+                                    .long("speed")
+                                    .value_name("SPEED")
+                                    .help("Sets the speed of each update")
+                                    .takes_value(true))
+                               .get_matches();
+
+   // TODO: move error into clap parsing
+   let speed = if let Some(valstr) = matches.value_of("speed") {
+      match u64::from_str(valstr) {
+         Ok(val) => val,
+         Err(_) => {
+            println!("error: {} is not a valid speed", valstr);
+            DEFAULT_SPEED
+         }
+      }
+   } else {
+      DEFAULT_SPEED
+   };
+
    let opengl = OpenGL::V3_2;
 
    let mut window: GlutinWindow = WindowSettings::new(
-      "Conway's Game of Life",
+      WINDOW_TITLE,
       [WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32]
    ).fullscreen(false).exit_on_esc(true).build().unwrap();
 
    let mut app = App::new(GlGraphics::new(opengl));
 
-   let event_settings = EventSettings::new().ups(2).max_fps(60);
+   let event_settings = EventSettings::new().ups(speed).max_fps(60);
    let mut events = Events::new(event_settings);
    while let Some(e) = events.next(&mut window) {
       if let Some(r) = e.render_args() {
          app.render(&r);
-	  }
+      }
 
       if let Some(u) = e.update_args() {
          app.update(&u);
-	  }
+      }
 
-	  if let Some(b) = e.release_args() {
-         app.release(&b);
-	  }
+      if let Some(b) = e.release_args() {
+         app.release(&mut window, &b);
+      }
 
-	  if let Some(c) = e.mouse_cursor_args() {
+      if let Some(c) = e.mouse_cursor_args() {
          app.mouse_move(c);
-	  }
+      }
    }
 }
