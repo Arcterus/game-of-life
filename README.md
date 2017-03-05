@@ -26,7 +26,8 @@ Contribute
 ----------
 
 I'd appreciate any contributions, especially for fixing bugs and improving the
-UI.  Contributions target Rust's master branch until Rust 1.0 is released.
+UI.  Contributions target the latest stable version of Rust (1.15 at the time
+of writing).
 
 Credits
 -------
