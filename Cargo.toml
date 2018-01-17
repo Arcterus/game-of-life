@@ -1,11 +1,20 @@
 [package]
-
 name = "game-of-life"
+description = "An implementation of Conway's Game of Life using Piston."
 version = "0.1.0"
 authors = [
     "Arcterus <arcterus@mail.com>",
     "indiv0 <contact@nikitapek.in>"
 ]
+homepage = "https://github.com/Arcterus/game-of-life"
+repository = "https://github.com/Arcterus/game-of-life"
+readme = "README.md"
+keywords = ["life", "conway", "game", "automaton", "cellular"]
+categories = ["games", "simulation"]
+license = "MPL-2.0"
+
+[badges]
+travis-ci = { repository = "Arcterus/game-of-life" }
 
 [[bin]]
 
