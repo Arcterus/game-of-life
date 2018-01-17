@@ -7,7 +7,6 @@ extern crate piston;
 extern crate glutin_window;
 extern crate opengl_graphics;
 
-use std::str::FromStr;
 use std::collections::HashSet;
 use clap::Arg;
 use graphics::*;
@@ -20,12 +19,11 @@ use glutin_window::GlutinWindow;
 
 pub const WINDOW_TITLE: &'static str = "Conway's Game of Life";
 
-pub const WINDOW_HEIGHT: usize = 480;
-pub const WINDOW_WIDTH: usize = 640;
-
+pub const DEFAULT_WINDOW_HEIGHT: u32 = 480;
+pub const DEFAULT_WINDOW_WIDTH: u32 = 640;
 pub const DEFAULT_SPEED: u64 = 2;
 
-pub const BLOCK_SIZE: usize = 10;  // NOTE: WINDOW_HEIGHT and WINDOW_WIDTH should be divisible by this
+pub const BLOCK_SIZE: usize = 10;  // NOTE: window height and width should be divisible by this
 
 pub enum Neighbor {
    Block(Block),
@@ -49,6 +47,8 @@ pub struct Location {
 }
 
 pub struct App {
+   width: u32,
+   height: u32,
    gl: GlGraphics,
    grid: Grid,
    started: bool,
@@ -57,11 +57,11 @@ pub struct App {
 }
 
 impl Grid {
-   pub fn new() -> Grid {
+   pub fn new(width: usize, height: usize) -> Grid {
       let mut rows: Vec<Vec<Option<Block>>> = vec!();
-      rows.reserve(WINDOW_HEIGHT / BLOCK_SIZE);
-      for _ in 0..(WINDOW_HEIGHT / BLOCK_SIZE) {
-         rows.push(vec![None; WINDOW_WIDTH / BLOCK_SIZE]);
+      rows.reserve(height / BLOCK_SIZE);
+      for _ in 0..(height / BLOCK_SIZE) {
+         rows.push(vec![None; width / BLOCK_SIZE]);
       }
       Grid {
          grid: rows,
@@ -199,8 +199,6 @@ impl Block {
 impl Location {
    #[inline]
    pub fn new(x: usize, y: usize) -> Location {
-      assert!(x <= WINDOW_WIDTH / BLOCK_SIZE);
-      assert!(y <= WINDOW_HEIGHT / BLOCK_SIZE);
       Location {
          x: x,
          y: y
@@ -210,10 +208,12 @@ impl Location {
 
 impl App {
    #[inline]
-   pub fn new(gl: GlGraphics) -> App {
+   pub fn new(width: u32, height: u32, gl: GlGraphics) -> App {
       App {
+         width: width,
+         height: height,
          gl: gl,
-         grid: Grid::new(),
+         grid: Grid::new(width as usize, height as usize),
          started: false,
          mouse_loc: (0.0, 0.0),
          mouse_down: (false, false)
@@ -238,7 +238,7 @@ impl App {
    pub fn key_release<W: AdvancedWindow>(&mut self, window: &mut W, key: Key) {
       match key {
          Key::R => {
-            self.grid = Grid::new();
+            self.grid = Grid::new(self.width as usize, self.height as usize);
             self.started = false;
             self.mouse_loc = (0.0, 0.0);
          }
@@ -302,9 +302,9 @@ impl App {
    fn update_logic(&mut self) {
       use std::rand::random;
 
-      let mut x = (random::<f64>() * WINDOW_WIDTH as f64) as u32;
+      let mut x = (random::<f64>() * self.width as f64) as u32;
       x = (x - x % BLOCK_SIZE) / BLOCK_SIZE;
-      let mut y = (random::<f64>() * WINDOW_HEIGHT as f64) as u32;
+      let mut y = (random::<f64>() * self.height as f64) as u32;
       y = (y - y % BLOCK_SIZE) / BLOCK_SIZE;
       self.grid.insert(Block::new(Location::new(x, y)));
    }
@@ -353,8 +353,8 @@ impl App {
 }
 
 fn main() {
-   assert!(WINDOW_WIDTH % BLOCK_SIZE == 0);
-   assert!(WINDOW_HEIGHT % BLOCK_SIZE == 0);
+   assert!(DEFAULT_WINDOW_WIDTH % BLOCK_SIZE as u32 == 0);
+   assert!(DEFAULT_WINDOW_HEIGHT % BLOCK_SIZE as u32 == 0);
 
    let matches = clap::App::new("game-of-life")
                                .version(crate_version!())
@@ -365,30 +365,39 @@ fn main() {
                                     .long("speed")
                                     .value_name("SPEED")
                                     .help("Sets the speed of each update")
-                                    .takes_value(true))
+                                    .takes_value(true)
+                                    .validator(is_valid_speed))
+                               .arg(Arg::with_name("width")
+                                    .short("w")
+                                    .long("width")
+                                    .value_name("WIDTH")
+                                    .help("Sets the width of the window")
+                                    .takes_value(true)
+                                    .validator(is_valid_width_or_height))
+                               .arg(Arg::with_name("height")
+                                    .short("h")
+                                    .long("height")
+                                    .value_name("HEIGHT")
+                                    .help("Sets the height of the window")
+                                    .takes_value(true)
+                                    .validator(is_valid_width_or_height))
                                .get_matches();
 
-   // TODO: move error into clap parsing
-   let speed = if let Some(valstr) = matches.value_of("speed") {
-      match u64::from_str(valstr) {
-         Ok(val) => val,
-         Err(_) => {
-            println!("error: {} is not a valid speed", valstr);
-            DEFAULT_SPEED
-         }
-      }
-   } else {
-      DEFAULT_SPEED
-   };
+   let speed = matches.value_of("speed").map(|valstr| valstr.parse::<u64>().unwrap())
+                                        .unwrap_or(DEFAULT_SPEED);
+   let width = matches.value_of("width").map(|valstr| valstr.parse::<u32>().unwrap())
+                                        .unwrap_or(DEFAULT_WINDOW_WIDTH);
+   let height = matches.value_of("height").map(|valstr| valstr.parse::<u32>().unwrap())
+                                          .unwrap_or(DEFAULT_WINDOW_HEIGHT);
 
    let opengl = OpenGL::V3_2;
 
    let mut window: GlutinWindow = WindowSettings::new(
       WINDOW_TITLE,
-      [WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32]
+      [width as u32, height as u32]
    ).fullscreen(false).exit_on_esc(true).build().unwrap();
 
-   let mut app = App::new(GlGraphics::new(opengl));
+   let mut app = App::new(width, height, GlGraphics::new(opengl));
 
    let event_settings = EventSettings::new().ups(speed).max_fps(60);
    let mut events = Events::new(event_settings);
@@ -412,5 +421,23 @@ fn main() {
       if let Some(c) = e.mouse_cursor_args() {
          app.mouse_move(c);
       }
+   }
+}
+
+fn is_valid_width_or_height(valstr: String) -> Result<(), String> {
+   if let Ok(val) = valstr.parse::<u32>() {
+      if val % BLOCK_SIZE as u32 == 0 {
+         return Ok(())
+      }
+   }
+
+   Err(format!("{} is not a valid size (must be positive and divisible by {}", valstr, BLOCK_SIZE))
+}
+
+fn is_valid_speed(valstr: String) -> Result<(), String> {
+   if valstr.parse::<u32>().is_ok() {
+      Ok(())
+   } else {
+      Err(format!("{} is not a valid speed (must be positive)", valstr))
    }
 }
