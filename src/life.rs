@@ -1,5 +1,3 @@
-#![feature(conservative_impl_trait)]
-
 #[macro_use]
 extern crate clap;
 extern crate fnv;
@@ -104,7 +102,7 @@ impl Grid {
       if self.valid(block.loc.x, block.loc.y) {
          const PLACES: [(isize, isize); 8] = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (0, -1), (1, 1), (1, -1), (1, 0)];
          
-         Some(PLACES.into_iter().filter_map(move |&(x, y)| {
+         Some(PLACES.iter().filter_map(move |&(x, y)| {
             let xpos = (block.loc.x as isize + x) as usize;
             let ypos = (block.loc.y as isize + y) as usize;
             if self.valid(xpos, ypos) {
@@ -158,7 +156,6 @@ impl Grid {
    #[inline]
    pub fn render(&mut self, gl: &mut GlGraphics, started: bool, zoom_factor: f64, args: &RenderArgs) {
       use graphics::grid::*;
-      use graphics::line::Line;
 
       const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
